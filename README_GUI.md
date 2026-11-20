@@ -7,11 +7,13 @@ cd C:\Users\SAIF\Desktop\ai_cep
 py app.py
 ```
 
-Select an environment `.txt` file and schedule `.txt` file, choose `A*` or `BFS`, then click **Run Simulation**.
+Choose a preset from the **Scenario** menu, select `A*` or `BFS`, then click **Run simulation**. The map, cleaning order, navigation legs, movement cost, and nodes expanded appear in the results view.
 
-The included scenarios are:
+Bundled scenarios:
 
-- `Environment.txt` and `Schedule.txt`
-- `Environment_Sample.txt` and `Schedule_Sample.txt`
-- `Environment_Error.txt` and `Schedule_Sample.txt`
-- `Environment.txt` and `Schedule_Error.txt`
+- **Experiment** — `Environment.txt` and `Schedule.txt`
+- **Sample** — `Environment_Sample.txt` and `Schedule_Sample.txt`
+- **CSP Failure** — cyclic precedence constraints
+- **Navigation Failure** — unreachable dirty location
+
+To use files from your PC, choose **Custom files** and click **Browse PC...** for the environment and schedule files. You can also browse to a different file while any preset is selected.

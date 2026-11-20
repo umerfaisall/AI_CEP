@@ -3,6 +3,7 @@ import heapq
 import re
 import tkinter as tk
 from collections import deque
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 
@@ -272,88 +273,237 @@ class VacuumRobotGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Intelligent Vacuum-Cleaning Robot")
-        self.geometry("1180x720")
-        self.minsize(900, 600)
+        self.geometry("1280x820")
+        self.minsize(980, 680)
+        self.configure(bg="#eef2f7")
 
+        self.project_dir = Path(__file__).resolve().parent
+        self.scenarios = {
+            "Experiment": ("Environment.txt", "Schedule.txt"),
+            "Sample": ("Environment_Sample.txt", "Schedule_Sample.txt"),
+            "CSP Failure": ("Environment.txt", "Schedule_Error.txt"),
+            "Navigation Failure": ("Environment_Error.txt", "Schedule_Sample.txt"),
+        }
+        self.scenario = tk.StringVar(value="Experiment")
         self.environment_path = tk.StringVar()
         self.schedule_path = tk.StringVar()
         self.algorithm = tk.StringVar(value="A*")
-        self.status_message = tk.StringVar(value="Select files and run a simulation.")
+        self.status_message = tk.StringVar(value="Ready to run a simulation.")
+        self._grid_state = None
+
+        self._configure_styles()
+        self._select_scenario()
 
         self._build_ui()
 
+    def _configure_styles(self):
+        style = ttk.Style(self)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        style.configure("App.TFrame", background="#eef2f7")
+        style.configure("Panel.TFrame", background="#ffffff")
+        style.configure(
+            "Panel.TLabelframe",
+            background="#ffffff",
+            bordercolor="#d8e0eb",
+            relief="solid",
+        )
+        style.configure(
+            "Panel.TLabelframe.Label",
+            background="#ffffff",
+            foreground="#23324d",
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "TLabel",
+            background="#ffffff",
+            foreground="#34445f",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "Hint.TLabel",
+            background="#ffffff",
+            foreground="#718096",
+            font=("Segoe UI", 8),
+        )
+        style.configure("TEntry", padding=7)
+        style.configure("TCombobox", padding=6)
+        style.configure("TRadiobutton", background="#ffffff", foreground="#34445f")
+        style.configure(
+            "TButton",
+            padding=(10, 7),
+            background="#e8edf5",
+            foreground="#23324d",
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#d9e2ef"), ("pressed", "#cad6e5")],
+        )
+        style.configure(
+            "Accent.TButton",
+            padding=(16, 9),
+            background="#176b87",
+            foreground="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("active", "#125a72"), ("pressed", "#0f4e63")],
+            foreground=[("disabled", "#dbe6eb")],
+        )
+        style.configure(
+            "Treeview",
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground="#283650",
+            rowheight=27,
+            bordercolor="#e2e8f0",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#f1f5f9",
+            foreground="#34445f",
+            relief="flat",
+            font=("Segoe UI", 9, "bold"),
+            padding=6,
+        )
+        style.map("Treeview.Heading", background=[("active", "#e7edf5")])
+
     def _build_ui(self):
-        main = ttk.Frame(self, padding=12)
+        main = ttk.Frame(self, padding=18, style="App.TFrame")
         main.pack(fill="both", expand=True)
 
-        controls = ttk.LabelFrame(main, text="Scenario", padding=10)
-        controls.pack(fill="x")
+        header = tk.Frame(main, bg="#172943", padx=22, pady=17)
+        header.pack(fill="x", pady=(0, 14))
+        tk.Label(
+            header,
+            text="VACUUM ROBOT",
+            bg="#172943",
+            fg="#ffffff",
+            font=("Segoe UI", 19, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="Constraint-based cleaning schedule  |  Intelligent grid navigation",
+            bg="#172943",
+            fg="#c5d2e3",
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", pady=(3, 0))
 
-        ttk.Label(controls, text="Environment").grid(row=0, column=0, sticky="w")
-        ttk.Entry(controls, textvariable=self.environment_path, width=48).grid(
-            row=0, column=1, padx=6
+        controls = ttk.LabelFrame(main, text="Choose a scenario", padding=12, style="Panel.TLabelframe")
+        controls.pack(fill="x", pady=(0, 12))
+
+        ttk.Label(controls, text="Scenario").grid(row=0, column=0, sticky="w")
+        self.scenario_picker = ttk.Combobox(
+            controls,
+            textvariable=self.scenario,
+            values=(
+                "Experiment",
+                "Sample",
+                "CSP Failure",
+                "Navigation Failure",
+                "Custom files",
+            ),
+            state="readonly",
+            width=22,
+        )
+        self.scenario_picker.grid(row=1, column=0, sticky="ew", padx=(0, 12))
+        self.scenario_picker.bind("<<ComboboxSelected>>", self._select_scenario)
+
+        algorithm_frame = ttk.Frame(controls, style="Panel.TFrame")
+        algorithm_frame.grid(row=0, column=1, rowspan=2, padx=(8, 14), sticky="ns")
+        ttk.Label(algorithm_frame, text="Navigation algorithm").pack(anchor="w")
+        choice_row = ttk.Frame(algorithm_frame, style="Panel.TFrame")
+        choice_row.pack(anchor="w", pady=(6, 0))
+        ttk.Radiobutton(
+            choice_row, text="A* Search", variable=self.algorithm, value="A*"
+        ).pack(side="left", padx=(0, 12))
+        ttk.Radiobutton(
+            choice_row, text="BFS", variable=self.algorithm, value="BFS"
+        ).pack(side="left")
+
+        ttk.Button(
+            controls,
+            text="Run simulation",
+            style="Accent.TButton",
+            command=self.run_simulation,
+        ).grid(row=0, column=2, rowspan=2, padx=(8, 0), sticky="ns")
+        controls.columnconfigure(0, weight=1)
+
+        paths = ttk.Frame(controls, style="Panel.TFrame")
+        paths.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        ttk.Label(paths, text="Environment file").grid(row=0, column=0, sticky="w")
+        ttk.Entry(paths, textvariable=self.environment_path, state="readonly").grid(
+            row=1, column=0, sticky="ew", padx=(0, 8)
         )
         ttk.Button(
-            controls, text="Browse...", command=self._choose_environment
-        ).grid(row=0, column=2)
-
-        ttk.Label(controls, text="Schedule").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        ttk.Entry(controls, textvariable=self.schedule_path, width=48).grid(
-            row=1, column=1, padx=6, pady=(8, 0)
+            paths, text="Browse PC...", command=self._choose_environment
+        ).grid(row=1, column=1, padx=(0, 18))
+        ttk.Label(paths, text="Schedule file").grid(row=0, column=2, sticky="w")
+        ttk.Entry(paths, textvariable=self.schedule_path, state="readonly").grid(
+            row=1, column=2, sticky="ew", padx=(0, 8)
         )
         ttk.Button(
-            controls, text="Browse...", command=self._choose_schedule
-        ).grid(row=1, column=2, pady=(8, 0))
+            paths, text="Browse PC...", command=self._choose_schedule
+        ).grid(row=1, column=3)
+        paths.columnconfigure(0, weight=1)
+        paths.columnconfigure(2, weight=1)
 
-        algorithm_frame = ttk.Frame(controls)
-        algorithm_frame.grid(row=0, column=3, rowspan=2, padx=(24, 0), sticky="ns")
-        ttk.Label(algorithm_frame, text="Search").pack(anchor="w")
-        ttk.Radiobutton(
-            algorithm_frame, text="A*", variable=self.algorithm, value="A*"
-        ).pack(anchor="w")
-        ttk.Radiobutton(
-            algorithm_frame, text="BFS", variable=self.algorithm, value="BFS"
-        ).pack(anchor="w")
+        content = ttk.Panedwindow(main, orient=tk.HORIZONTAL)
+        content.pack(fill="both", expand=True)
 
-        ttk.Button(
-            controls, text="Run Simulation", command=self.run_simulation
-        ).grid(row=0, column=4, rowspan=2, padx=(18, 0), sticky="ns")
-        controls.columnconfigure(1, weight=1)
+        left = ttk.LabelFrame(
+            content, text="Environment map", padding=12, style="Panel.TLabelframe"
+        )
+        right = ttk.LabelFrame(
+            content, text="Simulation results", padding=12, style="Panel.TLabelframe"
+        )
+        content.add(left, weight=3)
+        content.add(right, weight=2)
 
-        content = ttk.Frame(main)
-        content.pack(fill="both", expand=True, pady=(10, 0))
+        legend = ttk.Frame(left, style="Panel.TFrame")
+        legend.pack(fill="x", pady=(0, 8))
+        for label, color in (
+            ("Charging station", "#45b7a3"),
+            ("Dirty location", "#f3c969"),
+            ("Robot path", "#a9d8cd"),
+            ("Obstacle", "#394867"),
+        ):
+            swatch = tk.Canvas(
+                legend, width=12, height=12, bg="#ffffff", highlightthickness=0
+            )
+            swatch.pack(side="left", padx=(0, 4))
+            swatch.create_rectangle(1, 1, 11, 11, fill=color, outline=color)
+            ttk.Label(legend, text=label, style="Hint.TLabel").pack(
+                side="left", padx=(0, 14)
+            )
 
-        left = ttk.LabelFrame(content, text="Grid View", padding=8)
-        left.pack(side="left", fill="both", expand=True)
         self.canvas = tk.Canvas(left, bg="#f7f9fc", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", self._redraw_grid)
 
-        right = ttk.LabelFrame(content, text="Results", padding=8)
-        right.pack(side="right", fill="both", expand=True)
-
-        stats = ttk.Frame(right)
-        stats.pack(fill="x")
-        self.status_label = ttk.Label(stats, textvariable=self.status_message)
-        self.status_label.pack(anchor="w")
+        ttk.Label(
+            right, textvariable=self.status_message, style="Hint.TLabel"
+        ).pack(anchor="w", pady=(0, 8))
 
         self.metrics = ttk.Treeview(
-            stats,
-            columns=("metric", "value"),
-            show="headings",
-            height=5,
+            right, columns=("metric", "value"), show="headings", height=5
         )
         self.metrics.heading("metric", text="Metric")
-        self.metrics.heading("value", text="Value")
-        self.metrics.column("metric", width=170)
-        self.metrics.column("value", width=230)
-        self.metrics.pack(fill="x", pady=(8, 8))
+        self.metrics.heading("value", text="Result")
+        self.metrics.column("metric", width=150, stretch=False)
+        self.metrics.column("value", width=180)
+        self.metrics.pack(fill="x", pady=(0, 12))
 
-        ttk.Label(right, text="Cleaning Schedule").pack(anchor="w")
+        ttk.Label(right, text="Cleaning schedule").pack(anchor="w")
         self.schedule_table = ttk.Treeview(
             right,
             columns=("slot", "task", "location"),
             show="headings",
-            height=8,
+            height=4,
         )
         for column, heading in (
             ("slot", "Time Slot"),
@@ -361,17 +511,17 @@ class VacuumRobotGUI(tk.Tk):
             ("location", "Location"),
         ):
             self.schedule_table.heading(column, text=heading)
-        self.schedule_table.column("slot", width=90)
-        self.schedule_table.column("task", width=90)
-        self.schedule_table.column("location", width=150)
-        self.schedule_table.pack(fill="x", pady=(4, 8))
+        self.schedule_table.column("slot", width=90, stretch=False)
+        self.schedule_table.column("task", width=75, stretch=False)
+        self.schedule_table.column("location", width=125)
+        self.schedule_table.pack(fill="x", pady=(4, 12))
 
-        ttk.Label(right, text="Navigation Legs").pack(anchor="w")
+        ttk.Label(right, text="Navigation legs").pack(anchor="w")
         self.leg_table = ttk.Treeview(
             right,
             columns=("leg", "from", "to", "cost", "nodes"),
             show="headings",
-            height=8,
+            height=5,
         )
         for column, heading in (
             ("leg", "#"),
@@ -381,29 +531,60 @@ class VacuumRobotGUI(tk.Tk):
             ("nodes", "Nodes"),
         ):
             self.leg_table.heading(column, text=heading)
-            width = 55 if column in ("leg", "cost", "nodes") else 130
-            self.leg_table.column(column, width=width)
+            width = 45 if column in ("leg", "cost", "nodes") else 105
+            self.leg_table.column(column, width=width, stretch=column in ("from", "to"))
         self.leg_table.pack(fill="both", expand=True, pady=(4, 0))
+
+    def _select_scenario(self, _event=None):
+        selected = self.scenario.get()
+        files = self.scenarios.get(selected)
+        if files is None:
+            return
+
+        environment = self.project_dir / files[0]
+        schedule = self.project_dir / files[1]
+        missing = [path.name for path in (environment, schedule) if not path.is_file()]
+        if missing:
+            message = f"Scenario files are missing: {', '.join(missing)}"
+            self.status_message.set(message)
+            messagebox.showerror("Scenario files missing", message)
+            self.scenario.set("Custom files")
+            return
+
+        self.environment_path.set(str(environment))
+        self.schedule_path.set(str(schedule))
+        self.status_message.set(f"{selected} scenario selected.")
 
     def _choose_environment(self):
         path = filedialog.askopenfilename(
             title="Select environment file",
+            initialdir=str(self.project_dir),
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
         )
         if path:
             self.environment_path.set(path)
+            self.scenario.set("Custom files")
 
     def _choose_schedule(self):
         path = filedialog.askopenfilename(
             title="Select schedule file",
+            initialdir=str(self.project_dir),
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
         )
         if path:
             self.schedule_path.set(path)
+            self.scenario.set("Custom files")
+
+    def _redraw_grid(self, _event=None):
+        if self._grid_state:
+            self.draw_grid(*self._grid_state)
 
     def run_simulation(self):
         environment = self.environment_path.get()
         schedule_file = self.schedule_path.get()
+        self._clear_tables()
+        self._grid_state = None
+        self.canvas.delete("all")
         if not environment or not schedule_file:
             messagebox.showwarning(
                 "Missing files", "Please select both an environment and schedule file."
@@ -425,10 +606,10 @@ class VacuumRobotGUI(tk.Tk):
         }
         assignment = backtracking_search(variables, domains, constraints)
 
-        self._clear_tables()
         if assignment is None:
             self.status_message.set("CSP failure: no feasible schedule.")
             self._add_metric("Status", "No feasible schedule")
+            self._grid_state = (grid, charging_station, dirty_locations, None)
             self.draw_grid(grid, charging_station, dirty_locations)
             return
 
@@ -456,6 +637,7 @@ class VacuumRobotGUI(tk.Tk):
             path, cost, nodes = search(
                 grid, current, target, self.algorithm.get()
             )
+            total_nodes += nodes
             if path is None:
                 legs.append(
                     {"from": str(current), "to": f"{task} {target}", "cost": "N/A",
@@ -468,12 +650,12 @@ class VacuumRobotGUI(tk.Tk):
             )
             complete_path.extend(path[1:])
             total_cost += cost
-            total_nodes += nodes
             current = target
         else:
             path, cost, nodes = search(
                 grid, current, charging_station, self.algorithm.get()
             )
+            total_nodes += nodes
             if path is None:
                 legs.append(
                     {"from": str(current), "to": "Charging Station",
@@ -487,7 +669,6 @@ class VacuumRobotGUI(tk.Tk):
                 )
                 complete_path.extend(path[1:])
                 total_cost += cost
-                total_nodes += nodes
 
         success = all(
             leg["cost"] != "N/A" for leg in legs
@@ -497,7 +678,7 @@ class VacuumRobotGUI(tk.Tk):
                 f"Success — cleaned all locations and returned to charging station."
             )
         else:
-            self.status_message.set("Navigation failure — an target is unreachable.")
+            self.status_message.set("Navigation failure — a target is unreachable.")
 
         for index, leg in enumerate(legs, start=1):
             self.leg_table.insert(
@@ -508,15 +689,16 @@ class VacuumRobotGUI(tk.Tk):
         self._add_metric("Algorithm", self.algorithm.get())
         self._add_metric("Status", "Success" if success else "Navigation failure")
         self._add_metric("Schedule Valid", str(verify_schedule(assignment, constraints)))
-        self._add_metric("Total Movement Cost", str(total_cost))
+        self._add_metric("Total Movement Cost", str(total_cost) if success else "N/A")
         self._add_metric("Total Nodes Expanded", str(total_nodes))
 
-        self.draw_grid(
+        self._grid_state = (
             grid,
             charging_station,
             dirty_locations,
             complete_path if success else None,
         )
+        self.draw_grid(*self._grid_state)
 
     def _clear_tables(self):
         for table in (self.metrics, self.schedule_table, self.leg_table):
@@ -530,8 +712,8 @@ class VacuumRobotGUI(tk.Tk):
         canvas = self.canvas
         canvas.delete("all")
         canvas.update_idletasks()
-        width = max(canvas.winfo_width(), 400)
-        height = max(canvas.winfo_height(), 400)
+        width = max(canvas.winfo_width(), 1)
+        height = max(canvas.winfo_height(), 1)
         rows = grid["rows"]
         cols = grid["cols"]
         cell = min(width / cols, height / rows)
@@ -550,11 +732,11 @@ class VacuumRobotGUI(tk.Tk):
                 if position in grid["obstacles"]:
                     fill = "#394867"
                 elif position == charging_station:
-                    fill = "#57b7a6"
+                    fill = "#45b7a3"
                 elif position in dirty_locations:
-                    fill = "#f4c95d"
+                    fill = "#f3c969"
                 elif position in path_set:
-                    fill = "#9fd3c7"
+                    fill = "#a9d8cd"
                 canvas.create_rectangle(
                     x1, y1, x2, y2, fill=fill, outline="#d9dee8"
                 )
