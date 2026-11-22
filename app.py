@@ -364,6 +364,10 @@ def prune_latest_slots(domains, constraints):
 def backtracking_search(variables, domains, constraints):
     """Find a complete task -> slot assignment, or return None if no feasible schedule exists."""
 
+    # Strict precedence cannot place a task before itself.
+    if any(before == after for before, after in constraints['precedence']):
+        return None
+
     def backtrack(assignment, current_domains):
         if len(assignment) == len(variables):         # every task has a slot: done
             return assignment
@@ -838,9 +842,10 @@ class VacuumRobotGUI(tk.Tk):
         }
         assignment = backtracking_search(variables, domains, constraints)
 
-        if assignment is None:
+        if assignment is None or not verify_schedule(assignment, constraints):
             self.status_message.set("CSP failure: no feasible schedule.")
             self._add_metric("Status", "No feasible schedule")
+            self._add_metric("Schedule Valid", "False")
             self._grid_state = (grid, charging_station, dirty_locations, None)
             self.draw_grid(grid, charging_station, dirty_locations)
             return
@@ -925,7 +930,7 @@ class VacuumRobotGUI(tk.Tk):
 
         self._add_metric("Algorithm", self.algorithm.get())
         self._add_metric("Status", "Success" if success else "Navigation failure")
-        self._add_metric("Schedule Valid", str(verify_schedule(assignment, constraints)))
+        self._add_metric("Schedule Valid", "True")
         self._add_metric("Total Movement Cost", str(total_cost) if success else "N/A")
         self._add_metric("Total Nodes Expanded", str(total_nodes))
 
